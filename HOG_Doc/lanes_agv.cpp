@@ -27,8 +27,10 @@ int j=0;
 
 class Lanes
 {
-	Mat img,img_gray,bisect;
+	Mat img,img_gray,bisect,top_view;
 	vector<Vec2i> L,R;
+	int frameWidth = 640;
+	int frameHeight = 480;
 public:
 	Lanes(VideoCapture cap);
 	void Mix_Channel();
@@ -39,6 +41,7 @@ public:
 	void Edge();
 	void Hough();
 	void Dilation();
+	void topview();
 	void control_points();
 	void control_vanishing();
 };
@@ -68,6 +71,7 @@ while(1)
 	// L.Mix_Channel();
 	// L.display();
 	L.Edge();
+	L.topview();
 	// L.Hough();
 	// L.display();
 	L.Brightest_Pixel();
@@ -204,6 +208,89 @@ void Lanes::Brightest_Pixel()
 	//waitKey(0);
 }
 
+void Lanes::topview()
+{
+
+        Mat source=top_view.clone(), destination;
+        int alpha_ = 90, beta_ = 90, gamma_ = 90;
+        int f_ = 500, dist_ = 500;
+
+        // namedWindow("Result", 1);
+
+        //createTrackbar("Alpha", "Result", &alpha_, 180);
+        //createTrackbar("Beta", "Result", &beta_, 180);
+        //createTrackbar("Gamma", "Result", &gamma_, 180);
+        //createTrackbar("f", "Result", &f_, 2000);
+        //createTrackbar("Distance", "Result", &dist_, 2000);
+            resize(source, source,Size(frameWidth, frameHeight));
+
+            double focalLength, dist, alpha, beta, gamma; 
+
+            alpha = 43;
+            beta =((double)beta_ -90) * PI/180;
+            gamma =((double)gamma_ -90) * PI/180;
+            focalLength = (double)f_;
+            dist = (double)dist_;
+            Size image_size = source.size();
+                    double w = (double)image_size.width, h = (double)image_size.height;
+
+
+                    // Projecion matrix 2D -> 3D
+                    Mat A1 = (Mat_<float>(4, 3)<< 
+                        1, 0, -w/2,
+                        0, 1, -h/2,
+                        0, 0, 0,
+                        0, 0, 1 );
+
+
+                    // Rotation matrices Rx, Ry, Rz
+
+                    Mat RX = (Mat_<float>(4, 4) << 
+                        1, 0, 0, 0,
+                        0, cos(alpha), -sin(alpha), 0,
+                        0, sin(alpha), cos(alpha), 0,
+                        0, 0, 0, 1 );
+
+                    Mat RY = (Mat_<float>(4, 4) << 
+                        cos(beta), 0, -sin(beta), 0,
+                        0, 1, 0, 0,
+                        sin(beta), 0, cos(beta), 0,
+                        0, 0, 0, 1  );
+
+                    Mat RZ = (Mat_<float>(4, 4) << 
+                        cos(gamma), -sin(gamma), 0, 0,
+                        sin(gamma), cos(gamma), 0, 0,
+                        0, 0, 1, 0,
+                        0, 0, 0, 1  );
+
+
+                    // R - rotation matrix
+                    Mat R = RX * RY * RZ;
+
+                    // T - translation matrix
+                    Mat T = (Mat_<float>(4, 4) << 
+                        1, 0, 0, 0,  
+                        0, 1, 0, 0,  
+                        0, 0, 1, dist,  
+            			0, 0, 0, 1); 
+
+        // K - intrinsic matrix 
+        Mat K = (Mat_<float>(3, 4) << 
+            focalLength, 0, w/2, 0,
+            0, focalLength, h/2, 0,
+            0, 0, 1, 0
+            ); 
+
+
+        Mat transformationMat = K * (T * (R * A1));
+
+        warpPerspective(source, destination, transformationMat, image_size, INTER_CUBIC | WARP_INVERSE_MAP);
+        top_view=destination.clone();
+        imshow("Result", destination);
+        waitKey(200);
+
+}
+
 void Lanes::Edge()
 {
 	Mat Gx, Gy, Ga(img.rows,img.cols,CV_8UC1,Scalar(0)), Gb(img.rows,img.cols,CV_8UC1,Scalar(0)), Gc(img.rows,img.cols,CV_8UC1,Scalar(0)), Gd(img.rows,img.cols,CV_8UC1,Scalar(0));
@@ -231,6 +318,7 @@ void Lanes::Edge()
 	vector<Rect> roi;
 	vector<Mat> roi_img;
 	Mat t=img_gray.clone();
+	
 	Mat t1 = img_gray.clone();
 	
 	cvtColor(t1,t,CV_GRAY2BGR);
@@ -287,7 +375,7 @@ void Lanes::Edge()
 	//roi_img now contains all the images in it which are to be predicted for lebelling
 	for(int i = 0;i<roi_img.size();i++) {
 		Rect rect = roi[i];
-		cout << "Check" << endl;
+		//cout << "Check" << endl;
 		Point tl = rect.tl(),br = rect.br();
 		rectangle(img,tl,br,Scalar(0,0,0),2,8,0);
 	//SVM CODE
@@ -355,59 +443,12 @@ void Lanes::Edge()
 	//cvtColor(img,img_gray,CV_BGR2GRAY);
 	}
 	}
-	rectangle(img_gray,Point(0,img.rows*0.9),Point(img.cols-1,img.rows-1),Scalar(0),-1,8,0);
+	rectangle(img_gray,Point(0,img.rows*0.75),Point(img.cols-1,img.rows-1),Scalar(0),-1,8,0);
 	line(img,Point(0,img.rows/3),Point(img.cols-1,img.rows/3), Scalar(255,0,0), 2, CV_AA);
+	top_view=img_gray.clone();
 	imshow("erode",img_gray);
 	imshow("t",t);
-	// Sobel(img_gray, Gx, -1, 1, 0, 3, CV_SCHARR);
-	// Sobel(img_gray, Gy, -1, 0, 1, 3, CV_SCHARR);
-	// // imshow("gx",Gx);
-	// // imshow("gy",Gy);
 	
-	// Mat temp = img_gray.clone();
-
-	// int A[3][3] = {-1,0,1,-2,0,2,-1,0,1};
-	// int B[3][3] = {-2,-1,0,-1,0,1,0,1,2};
-	// int C[3][3] = {0,1,2,-1,0,1,-2,-1,0};
-	// int D[3][3] = {2,2,2,0,0,0,-5,-5,-5};
-
-	// for(int i = 0; i < img.rows; i++)
-	// 	for(int j = 0; j < img.cols; j++)
-	// 	{
-	// 		int sum_a, sum_b, sum_c, sum_d, count_a, count_b, count_c, count_d;
-	// 		sum_a = sum_b = sum_c = sum_d = count_a = count_b = count_c = count_d = 0;
-	// 		for(int m = -1; m < 2; m++)
-	// 			for(int n = -1; n < 2; n++)
-	// 			{
-	// 				if(i+m < 0 || j+n < 0 || i+m >= img.rows || j+n >= img.cols) continue;
-	// 				sum_a += img_gray.at<uchar>(i+m,j+n) * A[m+1][n+1];
-	// 				sum_b += img_gray.at<uchar>(i+m,j+n) * B[m+1][n+1];
-	// 				sum_c += img_gray.at<uchar>(i+m,j+n) * C[m+1][n+1];
-	// 				sum_d += img_gray.at<uchar>(i+m,j+n) * D[m+1][n+1];
-	// 				count_a += abs(A[m+1][n+1]);
-	// 				count_b += abs(B[m+1][n+1]);
-	// 				count_c += abs(C[m+1][n+1]);
-	// 				count_d += abs(D[m+1][n+1]);
-	// 			}
-	// 		sum_a /= count_a; sum_b /= count_b; sum_c /= count_c; sum_d /= count_d;
-	// 		Ga.at<uchar>(i,j) = sum_a; Gb.at<uchar>(i,j) = sum_b; Gc.at<uchar>(i,j) = sum_c; Gd.at<uchar>(i,j) = sum_d;
-
-	// 		if(sqrt(sum_a*sum_a + sum_b*sum_b + sum_c*sum_c - sum_d*sum_d) > INTENSITY_TH) temp.at<uchar>(i,j) = 255;
-	// 		else temp.at<uchar>(i,j) = 0;
-	// 		// int x = Gx.at<uchar>(i,j);
-	// 		// int y = Gy.at<uchar>(i,j);
-	// 		// float grad = atan((float)x / y) * 180.0/PI;
-	// 		// // cout<<grad<<'\t';
-	// 		// if(grad < 0) grad *= -1;
-	// 		// if((sqrt(x*x + y*y) > INTENSITY_TH)) img_gray.at<uchar>(i,j) = 255;
-	// 		// else img_gray.at<uchar>(i,j) = 0;
-	// 	}
-	// img_gray = temp;
-	// // Canny()
-	// imshow("edges",img_gray);
-	// imshow("ga",Ga); imshow("gb",Gb); imshow("Gc",Gc); imshow("Gd", Gd);
-	// // imshow("Gx", Gx); imshow("Gy",Gy);
-	//waitKey(0);
 }
 
 void Lanes::Dilation()
