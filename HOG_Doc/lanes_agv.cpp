@@ -1,10 +1,12 @@
 #include <iostream>
-#include<bits/stdc++.h>
+#include <bits/stdc++.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/gpu/gpu.hpp>
 #include <string>
+#include <time.h>
+#include <eigen3/Eigen/Dense>
 
 #define SUBSTRACTION_CONSTANT 30
 #define INTENSITY_TH 50
@@ -22,13 +24,16 @@ struct svm_parameter param;
 
 using namespace std;
 using namespace cv;
+using namespace Eigen;
+
 int j=0;
 
 
 class Lanes
 {
-	Mat img,img_gray,bisect,top_view;
+	Mat img,img_gray,bisect,top_view,points,curves;
 	vector<Vec2i> L,R;
+	vector<Point> left_lane,right_lane;
 	int frameWidth = 640;
 	int frameHeight = 480;
 public:
@@ -44,6 +49,7 @@ public:
 	void topview();
 	void control_points();
 	void control_vanishing();
+	void curve_fitting();
 };
 
 int main(int argc, char** argv)
@@ -76,6 +82,7 @@ while(1)
 	// L.display();
 	L.Brightest_Pixel();
 	L.control_points();
+	L.curve_fitting();
 	// L.control_vanishing();
 	waitKey(1);
 }
@@ -154,11 +161,11 @@ void Lanes::Intensity_adjust()  // the top part of frame may have some intensity
 
 void Lanes::Brightest_Pixel()
 {
-	bisect = img_gray.clone();
-	for(int i = 0; i < img.rows; i++)  
+	bisect = top_view.clone();
+	for(int i = 0; i < top_view.rows; i++)  
 	{  // finding the brightest pixel in each row
 		int l,r,max = 0;
-		for(int j = 0; j < img.cols/2; j++)
+		for(int j = 0; j < top_view.cols/2; j++)
 		{
 			bisect.at<uchar>(i,j) = 0;
 			// if(img_gray.at<uchar>(i,j) < INTENSITY_TH) img_gray.at<uchar>(i,j) = 0;
@@ -167,8 +174,8 @@ void Lanes::Brightest_Pixel()
 			for(int m = i-1; m < i+2; m++)
 				for(int n = j-1; n < j+2; n++)
 				{
-					if(m < 0 || n < 0 || m >= img.rows || n >= img.cols) continue;
-					sum += img_gray.at<uchar>(m,n); count++;
+					if(m < 0 || n < 0 || m >= top_view.rows || n >= top_view.cols) continue;
+					sum += top_view.at<uchar>(m,n); count++;
 				}
 			if(count != 0) sum /= count;
 			if(sum > max)
@@ -180,7 +187,7 @@ void Lanes::Brightest_Pixel()
 		}
 		if(max>100) bisect.at<uchar>(i,l) = 255;
 		max = 0;
-		for(int j = img.cols/2 + 1; j < img.cols; j++)
+		for(int j = top_view.cols/2 + 1; j < top_view.cols; j++)
 		{
 			bisect.at<uchar>(i,j) = 0;
 			// if(img_gray.at<uchar>(i,j) < INTENSITY_TH) img_gray.at<uchar>(i,j) = 0;
@@ -190,7 +197,7 @@ void Lanes::Brightest_Pixel()
 				for(int n = j-1; n < j+2; n++)
 				{
 					if(m < 0 || n < 0 || m >= img.rows || n >= img.cols) continue;
-					sum += img_gray.at<uchar>(m,n); count++;
+					sum += top_view.at<uchar>(m,n); count++;
 				}
 			if(count != 0) sum /= count;
 			if(sum > max)
@@ -287,7 +294,7 @@ void Lanes::topview()
         warpPerspective(source, destination, transformationMat, image_size, INTER_CUBIC | WARP_INVERSE_MAP);
         top_view=destination.clone();
         imshow("Result", destination);
-        waitKey(200);
+        //waitKey(200);
 
 }
 
@@ -493,20 +500,20 @@ void Lanes::Hough()
 
 void Lanes::control_points()
 {
-	Mat temp(img.rows, img.cols, CV_8UC1, Scalar(0));
+	Mat temp(top_view.rows, top_view.cols, CV_8UC1, Scalar(0));
 	int left_prev=0,right_prev=0,first=1;
-	for(int i = img.rows-1; i >= 20; i-=5)
+	for(int i = top_view.rows-1; i >= 20; i-=5)
 	{
 		if(i-20 < 0) break;
 		int left = 0,right = 0,c_l = 0, c_r = 0;
 		for(int j = i; j > i-20; j--)
 		{
 			if(j < 0) break;
-			for(int k = 0; k < img.cols/2; k++)
+			for(int k = 0; k < top_view.cols/2; k++)
 			{
 				if(bisect.at<uchar>(j,k) > 100) { left += k; c_l++; }
 			}
-			for(int k = img.cols/2+1; k < img.cols; k++)
+			for(int k = top_view.cols/2+1; k < top_view.cols; k++)
 			{
 				if(bisect.at<uchar>(j,k) > 100) { right += k; c_r++; }
 			}
@@ -521,13 +528,14 @@ void Lanes::control_points()
 		first=0;
 	}
 	int flag_l = 0, flag_r = 0, x_l, y_l, x_r, y_r;
-	for(int i = img.rows; i > img.rows/3; i--)
+	for(int i = top_view.rows; i > top_view.rows/3; i--)
 	{
-		for(int j = 0; j < img.cols/2; j++)
+		for(int j = 0; j < top_view.cols/2; j++)
 		{
 			if(temp.at<uchar>(i,j) != 255) continue;
 			if(flag_l == 0) {flag_l = 1; x_l = j; y_l = i; continue; }
 			//if(abs(x_l-j)>img.cols*0.08f) { continue;}
+			left_lane.push_back(Point(j,i));
 			line(img, Point(x_l, y_l), Point(j, i), Scalar(255,0,0), 3, 8);
 			x_l = j; y_l = i;
 		}
@@ -535,13 +543,128 @@ void Lanes::control_points()
 		{
 			if(temp.at<uchar>(i,j) != 255) continue;
 			if(flag_r == 0) {flag_r = 1; x_r = j; y_r = i; continue; }
+			right_lane.push_back(Point(j,i));
 			line(img, Point(x_r, y_r), Point(j, i), Scalar(0,0,255), 3, 8);
 			x_r = j; y_r = i;
 		}
 	}
+	curves=temp.clone();
 	imshow("points",temp);
 	imshow("lanes",img);
 	//waitKey(1);
+}
+
+void Lanes::curve_fitting()
+{
+	int m=100,max_inlier_l=0,max_inlier_r=0;
+	cvtColor(curves,curves,CV_GRAY2BGR);
+	time_t t;
+	unsigned int seedval = (unsigned)time(&t);
+	srand(seedval);
+	float a_l,b_l,c_l,a_r,b_r,c_r,error=0.5;
+	while(m--)
+	{
+		int i_1=(int)(rand()%left_lane.size());
+		int j_1=(int)(rand()%left_lane.size());
+		int k_1=(int)(rand()%left_lane.size());
+		if(i_1==j_1||i_1==k_1||j_1==k_1)
+		{
+			m++;
+			continue;
+		}
+		MatrixXd A(3,3),B(3,1),X(3,1);
+		A<< pow(left_lane[i_1].x,2),left_lane[i_1].x,1,
+			pow(left_lane[j_1].x,2),left_lane[j_1].x,1,
+			pow(left_lane[k_1].x,2),left_lane[k_1].x,1;
+		B<< left_lane[i_1].y,
+			left_lane[j_1].y,
+			left_lane[k_1].y;
+		if(!A.determinant()) continue;
+		X=(A.inverse())*B;
+		// cout<<"A det = "<<A.determinant()<<endl;
+		// cout<<"A_inv = "<<A.inverse()<<endl;
+		// cout<<"X_i = "<<A.inverse()*B<<endl;
+		int inlier=0;
+		for(int i=0;i<left_lane.size();i++)
+		{
+			if(i==i_1||i==j_1||i==k_1)
+				continue;
+			int err=pow(X(0.0)*pow(left_lane[i].x,2)+X(1.0)*left_lane[i].x+X(2.0)-left_lane[i].y,2);
+			if(err<error)
+				inlier++;
+		}
+		//cout<<"X(0.0) = "<<X(0.0)<<endl;
+		if(inlier>max_inlier_l)
+		{
+			max_inlier_l=inlier;
+			cout<<"X = "<<X<<endl;
+			a_l=X(0.0);
+			b_l=X(1.0);
+			c_l=X(2.0);
+		}
+	}
+	cout<<"a_l= "<<a_l<<endl;
+	m=100;
+	while(m--)
+	{
+		int i_2=(int)(rand()%right_lane.size());
+		int j_2=(int)(rand()%right_lane.size());
+		int k_2=(int)(rand()%right_lane.size());
+		//cout<<i_2<<" "<<j_2<<" "<<k_2<<endl;
+		if(i_2==j_2||i_2==k_2||j_2==k_2)
+		{
+			m++;
+			continue;
+		}
+		MatrixXd A(3,3),B(3,1),X(3,1);
+		A<< pow(right_lane[i_2].x,2),right_lane[i_2].x,1,
+			pow(right_lane[j_2].x,2),right_lane[j_2].x,1,
+			pow(right_lane[k_2].x,2),right_lane[k_2].x,1;
+		B<< right_lane[i_2].y,
+			right_lane[j_2].y,
+			right_lane[k_2].y;
+		if(!A.determinant()) continue;
+		X=(A.inverse())*B;
+		int inlier=0;
+		for(int i=0;i<right_lane.size();i++)
+		{
+			if(i==i_2||i==j_2||i==k_2)
+				continue;
+			int err=pow(X(0.0)*pow(right_lane[i].x,2)+X(1.0)*right_lane[i].x+X(2.0)-right_lane[i].y,2);
+			if(err<error)
+				inlier++;
+		}
+		if(inlier>max_inlier_r)
+		{
+			max_inlier_r=inlier;
+			cout<<"X = "<<X<<endl;
+			a_r=X(0.0);
+			b_r=X(1.0);
+			c_r=X(2.0);
+		}
+	}
+	cout<<"a_r = "<<a_r<<endl;
+	for(int i=0;i<top_view.cols/2;i++)
+	{
+		//int j=i+top_view.cols/2;
+		cout<<"E"<<endl;
+		int row_l=(int )(a_l*i*i+b_l*i+c_l);
+		int row_r=(int )(a_r*i*i+b_r*i+c_r);
+		cout<<row_l<<" "<<row_r<<endl;
+		Point temp_l,temp_r;
+		temp_l.y=i;
+		temp_r.x=row_l;
+		temp_r.y=i+top_view.cols/2;
+		temp_r.x=row_r;
+		if(abs(row_l)<top_view.rows)
+			 circle(curves,temp_l,2,Scalar(255,0,0),1,8,0);
+			//curves.at<Vec3b>(row_l,i)[0]=255;
+		if(abs(row_r)<top_view.rows)
+			 circle(curves,temp_r,2,Scalar(0,255,0),1,8,0);
+			//curves.at<Vec3b>(row_r,i+top_view.cols/2)[2]=255;
+
+	}
+	imshow("Yeeeaaaah",curves);
 }
 
 // void Lanes::control_vanishing()
