@@ -8,6 +8,7 @@
 #include <time.h>
 #include <eigen3/Eigen/Dense>
 
+#define w 240
 #define SUBSTRACTION_CONSTANT 30
 #define INTENSITY_TH 50
 #define PI 3.14159265
@@ -501,69 +502,71 @@ void Lanes::Hough()
 void Lanes::control_points()
 {
 	Mat temp(top_view.rows, top_view.cols, CV_8UC1, Scalar(0));
-	int left_prev=0,right_prev=0,first=1;
-	for(int i = top_view.rows-1; i >= 20; i-=5)
-	{
-		if(i-20 < 0) break;
-		int left = 0,right = 0,c_l = 0, c_r = 0;
-		for(int j = i; j > i-20; j--)
-		{
-			if(j < 0) break;
-			for(int k = 0; k < top_view.cols/2; k++)
-			{
-				if(bisect.at<uchar>(j,k) > 100) { left += k; c_l++; }
-			}
-			for(int k = top_view.cols/2+1; k < top_view.cols; k++)
-			{
-				if(bisect.at<uchar>(j,k) > 100) { right += k; c_r++; }
-			}
-		}
-		if(c_l == 0 && c_r == 0) continue;
-		if(c_l != 0) left /= c_l;
-		if(c_r != 0) right /= c_r;
-		if(c_l != 0) temp.at<uchar>(i-10,left) = 255;
-		if(c_r != 0) temp.at<uchar>(i-10,right) = 255;
-		left_prev=left;
-		right_prev=right;
-		first=0;
-	}
+	temp=bisect.clone();
+	// int left_prev=0,right_prev=0,first=1;
+	// for(int i = top_view.rows-1; i >= 20; i-=5)
+	// {
+	// 	if(i-20 < 0) break;
+	// 	int left = 0,right = 0,c_l = 0, c_r = 0;
+	// 	for(int j = i; j > i-20; j--)
+	// 	{
+	// 		if(j < 0) break;
+	// 		for(int k = 0; k < top_view.cols/2; k++)
+	// 		{
+	// 			if(bisect.at<uchar>(j,k) > 100) { left += k; c_l++; }
+	// 		}
+	// 		for(int k = top_view.cols/2+1; k < top_view.cols; k++)
+	// 		{
+	// 			if(bisect.at<uchar>(j,k) > 100) { right += k; c_r++; }
+	// 		}
+	// 	}
+	// 	if(c_l == 0 && c_r == 0) continue;
+	// 	if(c_l != 0) left /= c_l;
+	// 	if(c_r != 0) right /= c_r;
+	// 	if(c_l != 0) temp.at<uchar>(i-10,left) = 255;
+	// 	if(c_r != 0) temp.at<uchar>(i-10,right) = 255;
+	// 	left_prev=left;
+	// 	right_prev=right;
+	// 	first=0;
+	// }
 	int flag_l = 0, flag_r = 0, x_l, y_l, x_r, y_r;
 	for(int i = top_view.rows; i > top_view.rows/3; i--)
 	{
 		for(int j = 0; j < top_view.cols/2; j++)
 		{
-			if(temp.at<uchar>(i,j) != 255) continue;
+			if(temp.at<uchar>(i,j) <100) continue;
 			if(flag_l == 0) {flag_l = 1; x_l = j; y_l = i; continue; }
 			//if(abs(x_l-j)>img.cols*0.08f) { continue;}
-			left_lane.push_back(Point(j,i));
-			line(img, Point(x_l, y_l), Point(j, i), Scalar(255,0,0), 3, 8);
+			left_lane.push_back(Point(i,j));
+			//line(top_view, Point(x_l, y_l), Point(j, i), Scalar(255,0,0), 3, 8);
 			x_l = j; y_l = i;
 		}
-		for(int j = img.cols/2 + 1; j < img.cols; j++)
+		for(int j = top_view.cols/2 + 1; j < top_view.cols; j++)
 		{
-			if(temp.at<uchar>(i,j) != 255) continue;
+			if(temp.at<uchar>(i,j) <100) continue;
 			if(flag_r == 0) {flag_r = 1; x_r = j; y_r = i; continue; }
-			right_lane.push_back(Point(j,i));
-			line(img, Point(x_r, y_r), Point(j, i), Scalar(0,0,255), 3, 8);
+			right_lane.push_back(Point(i,j));
+			//line(img, Point(x_r, y_r), Point(j, i), Scalar(0,0,255), 3, 8);
 			x_r = j; y_r = i;
 		}
 	}
 	curves=temp.clone();
 	imshow("points",temp);
-	imshow("lanes",img);
+	//imshow("lanes",img);
 	//waitKey(1);
 }
 
 void Lanes::curve_fitting()
 {
-	int m=100,max_inlier_l=0,max_inlier_r=0;
+	int m=100,max_inlier_l=40,max_inlier_r=40;
 	cvtColor(curves,curves,CV_GRAY2BGR);
 	time_t t;
 	unsigned int seedval = (unsigned)time(&t);
 	srand(seedval);
-	float a_l,b_l,c_l,a_r,b_r,c_r,error=0.5;
+	float a_l=0,b_l=0,c_l=0,a_r=0,b_r=0,c_r=0,error=0.5;
 	while(m--)
 	{
+		if(!left_lane.size()) break;
 		int i_1=(int)(rand()%left_lane.size());
 		int j_1=(int)(rand()%left_lane.size());
 		int k_1=(int)(rand()%left_lane.size());
@@ -598,15 +601,19 @@ void Lanes::curve_fitting()
 		{
 			max_inlier_l=inlier;
 			cout<<"X = "<<X<<endl;
-			a_l=X(0.0);
-			b_l=X(1.0);
-			c_l=X(2.0);
+			//if(!fabs(a_l)<0.1f)
+				a_l=X(0.0);
+			//if(!fabs(b_l)<0.1f)
+				b_l=X(1.0);
+			//if(!fabs(c_l)<0.1f)
+				c_l=X(2.0);
 		}
 	}
-	cout<<"a_l= "<<a_l<<endl;
+	cout<<"Left : "<<a_l<<"y^2 +"<<b_l<<"y +"<<c_l<<endl;
 	m=100;
 	while(m--)
 	{
+		if(!right_lane.size()) break;
 		int i_2=(int)(rand()%right_lane.size());
 		int j_2=(int)(rand()%right_lane.size());
 		int k_2=(int)(rand()%right_lane.size());
@@ -638,29 +645,32 @@ void Lanes::curve_fitting()
 		{
 			max_inlier_r=inlier;
 			cout<<"X = "<<X<<endl;
-			a_r=X(0.0);
-			b_r=X(1.0);
-			c_r=X(2.0);
+			//if(!fabs(a_r)<0.1f)
+				a_r=X(0.0);
+			//if(!fabs(b_r)<0.1f)
+				b_r=X(1.0);
+			//if(!fabs(c_r)<0.1f)
+				c_r=X(2.0);
 		}
 	}
-	cout<<"a_r = "<<a_r<<endl;
-	for(int i=0;i<top_view.cols/2;i++)
+	cout<<"Right : "<<a_r<<"x^2 +"<<b_r<<"x +"<<c_r<<endl;
+	for(int i=0;i<top_view.rows;i++)
 	{
 		//int j=i+top_view.cols/2;
 		cout<<"E"<<endl;
-		int row_l=(int )(a_l*i*i+b_l*i+c_l);
-		int row_r=(int )(a_r*i*i+b_r*i+c_r);
-		cout<<row_l<<" "<<row_r<<endl;
+		int col_l=(int )(a_l*i*i+b_l*i+c_l);
+		int col_r=(int )(a_r*i*i+b_r*i+c_r);
+		cout<<col_l<<" "<<col_r<<endl;
 		Point temp_l,temp_r;
 		temp_l.y=i;
-		temp_r.x=row_l;
-		temp_r.y=i+top_view.cols/2;
-		temp_r.x=row_r;
-		if(abs(row_l)<top_view.rows)
-			 circle(curves,temp_l,2,Scalar(255,0,0),1,8,0);
+		temp_l.x=col_l;
+		temp_r.y=i;
+		temp_r.x=col_r;
+		if(abs(col_l)<top_view.cols)
+			 circle(curves,temp_l,1,Scalar(255,0,0),1,8,0);
 			//curves.at<Vec3b>(row_l,i)[0]=255;
-		if(abs(row_r)<top_view.rows)
-			 circle(curves,temp_r,2,Scalar(0,255,0),1,8,0);
+		if(abs(col_r)<top_view.cols)
+			 circle(curves,temp_r,1,Scalar(0,255,0),1,8,0);
 			//curves.at<Vec3b>(row_r,i+top_view.cols/2)[2]=255;
 
 	}
