@@ -8,7 +8,7 @@
 #include <time.h>
 #include <eigen3/Eigen/Dense>
 
-#define w 240
+#define W 240
 #define SUBSTRACTION_CONSTANT 30
 #define INTENSITY_TH 50
 #define PI 3.14159265
@@ -32,7 +32,7 @@ int j=0;
 
 class Lanes
 {
-	Mat img,img_gray,bisect,top_view,points,curves;
+	Mat img,img_gray,bisect,top_view,points,curves,top_view_rgb;
 	vector<Vec2i> L,R;
 	vector<Point> left_lane,right_lane;
 	int frameWidth = 640;
@@ -47,7 +47,7 @@ public:
 	void Edge();
 	void Hough();
 	void Dilation();
-	void topview();
+	void topview(int );
 	void control_points();
 	void control_vanishing();
 	void curve_fitting();
@@ -78,7 +78,8 @@ while(1)
 	// L.Mix_Channel();
 	// L.display();
 	L.Edge();
-	L.topview();
+	L.topview(0);
+	L.topview(1);
 	// L.Hough();
 	// L.display();
 	L.Brightest_Pixel();
@@ -96,6 +97,7 @@ Lanes::Lanes(VideoCapture cap)
 {
  cap >> this->img; 
 	//img=given;
+ top_view_rgb=img.clone();
 //cvtColor(given,img_gray,CV_BGR2GRAY);
 	cvtColor(this->img, this->img_gray,CV_BGR2GRAY);
 }
@@ -216,10 +218,14 @@ void Lanes::Brightest_Pixel()
 	//waitKey(0);
 }
 
-void Lanes::topview()
+void Lanes::topview(int flag)
 {
-
-        Mat source=top_view.clone(), destination;
+	Mat source;
+		if(flag)
+        	source=top_view.clone();
+    	else
+    		source=top_view_rgb.clone();
+        Mat destination;
         int alpha_ = 90, beta_ = 90, gamma_ = 90;
         int f_ = 500, dist_ = 500;
 
@@ -293,7 +299,10 @@ void Lanes::topview()
         Mat transformationMat = K * (T * (R * A1));
 
         warpPerspective(source, destination, transformationMat, image_size, INTER_CUBIC | WARP_INVERSE_MAP);
-        top_view=destination.clone();
+        if(flag)
+        	top_view=destination.clone();
+        else
+        	top_view_rgb=destination.clone();
         imshow("Result", destination);
         //waitKey(200);
 
@@ -454,6 +463,7 @@ void Lanes::Edge()
 	rectangle(img_gray,Point(0,img.rows*0.75),Point(img.cols-1,img.rows-1),Scalar(0),-1,8,0);
 	line(img,Point(0,img.rows/3),Point(img.cols-1,img.rows/3), Scalar(255,0,0), 2, CV_AA);
 	top_view=img_gray.clone();
+	
 	imshow("erode",img_gray);
 	imshow("t",t);
 	
@@ -558,15 +568,15 @@ void Lanes::control_points()
 
 void Lanes::curve_fitting()
 {
-	int m=100,max_inlier_l=40,max_inlier_r=40;
-	cvtColor(curves,curves,CV_GRAY2BGR);
+	int m=100,max_inlier_l=50,max_inlier_r=50;
+	//cvtColor(curves,curves,CV_GRAY2BGR);
 	time_t t;
 	unsigned int seedval = (unsigned)time(&t);
 	srand(seedval);
-	float a_l=0,b_l=0,c_l=0,a_r=0,b_r=0,c_r=0,error=0.5;
+	double a_l=0,b_l=0,c_l=0,a_r=0,b_r=0,c_r=0,error=0.3;
 	while(m--)
 	{
-		if(!left_lane.size()) break;
+		if(!(left_lane.size()>max_inlier_l)) break;
 		int i_1=(int)(rand()%left_lane.size());
 		int j_1=(int)(rand()%left_lane.size());
 		int k_1=(int)(rand()%left_lane.size());
@@ -601,7 +611,7 @@ void Lanes::curve_fitting()
 		{
 			max_inlier_l=inlier;
 			cout<<"X = "<<X<<endl;
-			//if(!fabs(a_l)<0.1f)
+			// if(!(fabs(a_l)<0.01f)){
 				a_l=X(0.0);
 			//if(!fabs(b_l)<0.1f)
 				b_l=X(1.0);
@@ -611,18 +621,27 @@ void Lanes::curve_fitting()
 	}
 	cout<<"Left : "<<a_l<<"y^2 +"<<b_l<<"y +"<<c_l<<endl;
 	m=100;
+	seedval = (unsigned)time(&t);
+		srand(seedval);
+		
+	//srand(seedval);
 	while(m--)
 	{
-		if(!right_lane.size()) break;
-		int i_2=(int)(rand()%right_lane.size());
-		int j_2=(int)(rand()%right_lane.size());
-		int k_2=(int)(rand()%right_lane.size());
-		//cout<<i_2<<" "<<j_2<<" "<<k_2<<endl;
+	 //    unsigned int seedval = (unsigned)time(&t);
+		// srand(seedval);
+		if(!(right_lane.size()>max_inlier_r)){
+			 break;
+		}
+		int i_2=(int)((rand())%right_lane.size());
+		int j_2=(int)((rand())%right_lane.size());
+		int k_2=(int)((rand())%right_lane.size());
 		if(i_2==j_2||i_2==k_2||j_2==k_2)
 		{
 			m++;
+			cout<<"m = "<<m<<endl;
 			continue;
 		}
+		cout<<"YO3!!"<<endl;
 		MatrixXd A(3,3),B(3,1),X(3,1);
 		A<< pow(right_lane[i_2].x,2),right_lane[i_2].x,1,
 			pow(right_lane[j_2].x,2),right_lane[j_2].x,1,
@@ -645,7 +664,7 @@ void Lanes::curve_fitting()
 		{
 			max_inlier_r=inlier;
 			cout<<"X = "<<X<<endl;
-			//if(!fabs(a_r)<0.1f)
+			//if(!(fabs(a_r)<0.01f))
 				a_r=X(0.0);
 			//if(!fabs(b_r)<0.1f)
 				b_r=X(1.0);
@@ -667,14 +686,19 @@ void Lanes::curve_fitting()
 		temp_r.y=i;
 		temp_r.x=col_r;
 		if(abs(col_l)<top_view.cols)
-			 circle(curves,temp_l,1,Scalar(255,0,0),1,8,0);
+			 circle(top_view_rgb,temp_l,3,Scalar(255,0,0),-1,8,0);
 			//curves.at<Vec3b>(row_l,i)[0]=255;
+		if(a_r==0&&b_r==0&&c_r==0){
+			line(top_view_rgb,Point(top_view_rgb.cols-1,0),Point(top_view_rgb.cols-1,img.rows-1)
+				, Scalar(0,0,255), 3, CV_AA);
+			continue;
+		}
 		if(abs(col_r)<top_view.cols)
-			 circle(curves,temp_r,1,Scalar(0,255,0),1,8,0);
+			 circle(top_view_rgb,temp_r,3,Scalar(0,0,255),-1,8,0);
 			//curves.at<Vec3b>(row_r,i+top_view.cols/2)[2]=255;
 
 	}
-	imshow("Yeeeaaaah",curves);
+	imshow("Yeeeaaaah",top_view_rgb);
 }
 
 // void Lanes::control_vanishing()
