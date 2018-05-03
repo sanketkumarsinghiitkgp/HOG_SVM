@@ -44,6 +44,8 @@ class Lanes
 	int frameWidth = 640;
 	int frameHeight = 480;
 	quadratic left_fy,right_gy;
+	quadratic array_l[5],array_r[5];
+
 public:
 	Lanes(VideoCapture cap);
 	void Mix_Channel();
@@ -720,10 +722,37 @@ void Lanes::shift_parabola(quadratic quad,int flag)
 
 void Lanes::curve_fitting()
 {
+
+	array_l[frame_skip%5]=RANSAC(left_lane);
+	array_r[frame_skip%5]=RANSAC(right_lane);
+    
 	if(frame_skip%5==0)
 	{
-		left_fy=RANSAC(left_lane);
-		right_gy=RANSAC(right_lane);
+		for(int i=2; i<5; i++)
+		{
+			left_fy.a=0;
+			left_fy.b=0;
+			left_fy.c=0;
+			right_gy.a=0;
+			right_gy.b=0;
+			right_gy.c=0;
+		}
+		for(int i=2; i<5; i++)
+		{
+			left_fy.a+=array_l[i].a;
+			left_fy.b+=array_l[i].b;
+			left_fy.c+=array_l[i].c;
+			right_gy.a+=array_r[i].a;
+			right_gy.b+=array_r[i].b;
+			right_gy.c+=array_r[i].c;
+		}
+		left_fy.a/=3;
+		left_fy.b/=3;
+		left_fy.c/=3;
+		right_gy.a/=3;
+		right_gy.b/=3;
+		right_gy.c/=3;
+		
 	}
     plot_quad(left_fy,0);
     plot_quad(right_gy,1);
