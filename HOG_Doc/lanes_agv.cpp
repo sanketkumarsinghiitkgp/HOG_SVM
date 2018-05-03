@@ -7,8 +7,9 @@
 #include <string>
 #include <time.h>
 #include <eigen3/Eigen/Dense>
+#include <vector>
 
-#define w 240
+#define W 240
 #define SUBSTRACTION_CONSTANT 30
 #define INTENSITY_TH 50
 #define PI 3.14159265
@@ -24,6 +25,7 @@ struct svm_parameter param;
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 
 using namespace std;
+using std::vector;
 using namespace cv;
 using namespace Eigen;
 
