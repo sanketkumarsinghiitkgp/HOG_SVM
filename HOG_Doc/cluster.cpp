@@ -1,4 +1,5 @@
 #include "cluster.hpp"
+#include <algorithm>
 
 //using namespace std;
 //using namespace cv;
@@ -148,17 +149,22 @@ vector<cluster> clustering::merge_cluster(vector<cluster> Clusters,int no_cluste
 	{
 		for(int k1=k+1;k1<no_clusters;k1++)
 		{
-			double d_min=FLT_MAX;
-
+			double d_min=distance(Clusters[k].members[0],Clusters[k1].members[0]);
+			Point min1(-1,-1), min2(-1,-1);
 			for(int i=0;i<Clusters[k].members.size();i++)
 			{
 				for(int j=0;j<Clusters[k1].members.size();j++)
 				{
 					if(distance(Clusters[k].members[i],Clusters[k1].members[j])<d_min)
+					{
 						d_min=distance(Clusters[k].members[i],Clusters[k1].members[j]);
+						min1 = Clusters[k].members[i];
+						min2 = Clusters[k1].members[j];
+					}
 				}
 			}
-			cout<<"E1"<<endl;
+			cout<<"E1 "<< d_min << endl;
+			cout << "(" << min1.x << ", " << min1.y << ") ~ (" << min2.x << ", " << min2.y << ")\n";
 			if(d_min<=D_THRESH)
 			{
 				cout<<"E3"<<endl;
@@ -181,8 +187,9 @@ vector<cluster> clustering::merge_cluster(vector<cluster> Clusters,int no_cluste
 			{
 				cout<<"E4"<<endl;
 				cout<<"K = "<<k<<" K1 = "<<k1<<endl;
-				Final[count++]=Clusters[k];
-				Final[count++]=Clusters[k1];
+				Final.push_back(Clusters[k]);
+				Final.push_back(Clusters[k1]);
+				count += 2;
 			}
 
 		}
@@ -202,6 +209,38 @@ void clustering::show(vector<cluster> clusters,Mat img)
 			img.at<Vec3b>(clusters[i].members[j].y,clusters[i].members[j].x)=Vec3b(color[i].b,color[i].g,color[i].r);
 		}
 	}
+}
+
+template <class T>
+bool find_in(vector<T> list, T obj)
+{
+	for(int i = 0; i < list.size(); ++i)
+		if(list[i] == obj)
+			return true;
+	return false;
+}
+
+void clustering::showdebug(vector<cluster> clusters)
+{
+	Mat img(480,640,CV_8UC3,Scalar(0,0,0));
+	vector<Point> ptslist;
+	ptslist.clear();
+	for(int i=0;i<clusters.size();i++)
+	{
+		for(int j=0;j<clusters[i].members.size();j++)
+		{
+			img.at<Vec3b>(clusters[i].members[j].y,clusters[i].members[j].x)[0] = 255;
+			//cout << count(ptslist.begin(), ptslist.end(), clusters[i].members[j]) << endl;
+			if(find_in<Point>(ptslist, clusters[i].members[j]))
+			{
+				img.at<Vec3b>(clusters[i].members[j].y,clusters[i].members[j].x)[0] = 0;
+				img.at<Vec3b>(clusters[i].members[j].y,clusters[i].members[j].x)[2] = 255;
+			}
+			ptslist.push_back(clusters[i].members[j]);
+		}
+	}
+	imshow("Clustering Debug", img);
+	waitKey(1);
 }
 
 void clustering::init(Mat img,int n)
@@ -227,8 +266,9 @@ void clustering::init(Mat img,int n)
 	}
 	initialise_color();
 	clusters=clustering_iter(img_org,clusters,noc);
-	//clusters=merge_cluster(clusters,noc);
-	//show(clusters,img_org);
+	clusters=merge_cluster(clusters,noc);
+	show(clusters,img_org);
+	showdebug(clusters);
 	//cout<<"E4"<<endl;
 	for(int i=0;i<clusters.size();i++)
 		circle(img_org,clusters[i].mean,3,Scalar(color[i].b,color[i].g,color[i].r),-1,8,0);
