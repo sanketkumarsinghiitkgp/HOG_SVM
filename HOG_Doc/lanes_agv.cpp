@@ -3,17 +3,11 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-
-//using std::vector;
-//#include "videoio.hpp"
-
 #include <opencv2/gpu/gpu.hpp>
 #include <string>
 #include <time.h>  
 #include <eigen3/Eigen/Dense>
-
 #define W 150
-
 #define SUBSTRACTION_CONSTANT 30
 #define INTENSITY_TH 50
 #define PI 3.14159265
@@ -30,7 +24,6 @@ struct svm_parameter param;
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 
 using namespace std;
-//using std::vector;
 using namespace cv;
 using namespace Eigen;
 #include "cluster.cpp"
@@ -654,13 +647,13 @@ void Lanes::control_points()
 			x_r = j; y_r = i;
 		}   
 	} 	
-	curves=temp.clone();
+	curves=temp.clone(); 
 	cvtColor(temp,temp,CV_GRAY2BGR);
 	//Mat temp1=temp.clone();
 	clustering c; 	 
-	c.init(temp,2);  	
-	imshow("points",temp1); 
-	//imshow("lanes",img);
+	c.init(temp,3);  	
+	imshow("points",temp1);      
+	//imshow("lanes",img); 
 	//waitKey(1);
 }
 
@@ -738,7 +731,7 @@ void Lanes::plot_quad(int lane)
 			temp.x/=5;
 			if(abs(temp.x)<top_view.cols)
 			{
-			   	circle(top_view_rgb,temp,3,Scalar(255,0,0),-1,8,0);
+			   	circle(top_view_rgb,temp,3,Scalar(255,0,0),-1,8,0); 
 			}
 		}
 		if(lane==1)

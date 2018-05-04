@@ -1,7 +1,7 @@
 #include "cluster.hpp"
 
-// using namespace std;
-// using namespace cv;
+//using namespace std;
+//using namespace cv;
 
 
 void clustering::initialise_color()
@@ -138,6 +138,72 @@ vector<cluster> clustering::ret()
 	return clusters;
 }
 
+vector<cluster> clustering::merge_cluster(vector<cluster> Clusters,int no_clusters) 
+{
+	int count=0;
+	vector<cluster> Final;
+	Final.resize(no_clusters+1);
+	cout<<"E"<<endl;
+	for(int k=0;k<no_clusters-1;k++)
+	{
+		for(int k1=k+1;k1<no_clusters;k1++)
+		{
+			double d_min=FLT_MAX;
+
+			for(int i=0;i<Clusters[k].members.size();i++)
+			{
+				for(int j=0;j<Clusters[k1].members.size();j++)
+				{
+					if(distance(Clusters[k].members[i],Clusters[k1].members[j])<d_min)
+						d_min=distance(Clusters[k].members[i],Clusters[k1].members[j]);
+				}
+			}
+			cout<<"E1"<<endl;
+			if(d_min<=D_THRESH)
+			{
+				cout<<"E3"<<endl;
+				Final[count].members=Clusters[k].members;
+				Final[count].members.insert(Final[count].members.end(),Clusters[k1].members.begin(),Clusters[k1].members.end());
+				int n1=Clusters[k].members.size();
+				int n2=Clusters[k1].members.size();
+				Point p1;
+				p1.x=Clusters[k].mean.x;
+				p1.y=Clusters[k].mean.y;
+				Point p2;
+				p2.x=Clusters[k1].mean.x;
+				p2.y=Clusters[k1].mean.y;
+				Final[count].mean.x=(n1*p1.x+n2*p2.x)/(n1+n2);
+				Final[count].mean.y=(n1*p1.y+n2*p2.y)/(n1+n2);
+				count++;
+				
+			}
+			else
+			{
+				cout<<"E4"<<endl;
+				cout<<"K = "<<k<<" K1 = "<<k1<<endl;
+				Final[count++]=Clusters[k];
+				Final[count++]=Clusters[k1];
+			}
+
+		}
+		
+	}
+	cout<<"E2"<<endl;
+	return Final;
+}
+
+void clustering::show(vector<cluster> clusters,Mat img)
+{
+	//cout<<"E1"<<endl;
+	for(int i=0;i<clusters.size();i++)
+	{
+		for(int j=0;j<clusters[i].members.size();j++)
+		{
+			img.at<Vec3b>(clusters[i].members[j].y,clusters[i].members[j].x)=Vec3b(color[i].b,color[i].g,color[i].r);
+		}
+	}
+}
+
 void clustering::init(Mat img,int n)
 {
 	img_org=img;
@@ -160,8 +226,12 @@ void clustering::init(Mat img,int n)
 		clusters.push_back(new_clust);
 	}
 	initialise_color();
-	clusters = clustering_iter(img_org,clusters,noc);
+	clusters=clustering_iter(img_org,clusters,noc);
+	//clusters=merge_cluster(clusters,noc);
+	//show(clusters,img_org);
 	//cout<<"E4"<<endl;
+	for(int i=0;i<clusters.size();i++)
+		circle(img_org,clusters[i].mean,3,Scalar(color[i].b,color[i].g,color[i].r),-1,8,0);
 	clusters.clear();
 	imshow("Cluster",img_org);	
 	waitKey(1);
