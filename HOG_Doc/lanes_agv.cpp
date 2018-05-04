@@ -3,12 +3,15 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+using std::vector;
+#include "videoio.hpp"
 #include <opencv2/gpu/gpu.hpp>
 #include <string>
 #include <time.h>
 #include <eigen3/Eigen/Dense>
+#include <vector>
 
-#define W 150
+#define W 240
 #define SUBSTRACTION_CONSTANT 30
 #define INTENSITY_TH 50
 #define PI 3.14159265
@@ -24,6 +27,7 @@ struct svm_parameter param;
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 
 using namespace std;
+//using std::vector;
 using namespace cv;
 using namespace Eigen;
 
