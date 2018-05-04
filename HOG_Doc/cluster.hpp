@@ -9,7 +9,7 @@
 #include <opencv2/gpu/gpu.hpp>
 #include <string>
 #include <time.h>
-
+#define D_THRESH 5
 using namespace cv;
 using namespace std;
 
@@ -34,6 +34,8 @@ class clustering{
 		vector<cluster> shift_center(vector<cluster> ,Mat ,int );
 		vector<cluster> cluster_gen(vector<cluster> , Mat ,int );
 		vector<cluster> clustering_iter(Mat ,vector<cluster> ,int );
+		vector<cluster> merge_cluster(vector<cluster > ,int );
+		void show(vector<cluster> , Mat);
 	public:
 		void init(Mat ,int);
 		void print(vector<cluster> ,int );
