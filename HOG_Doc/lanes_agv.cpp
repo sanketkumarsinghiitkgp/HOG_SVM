@@ -48,13 +48,16 @@ class Lanes
 	int frameWidth = 640;
 	int frameHeight = 480;
 	quadratic left_fy,right_gy;
+	quadratic array_l[5],array_r[5];
+
 public:
 	Lanes(VideoCapture cap);
 	void Mix_Channel();
 	void Intensity_distribution();
 	void display();
 	void Intensity_adjust();
-	void Brightest_Pixel();
+	void Brightest_Pixel_col();
+	void Brightest_Pixel_row();
 	void Edge();
 	void Hough();
 	void Dilation();
@@ -97,7 +100,8 @@ int main(int argc, char** argv)
 	L.topview(1);
 		// L.Hough();
 		// L.display();
-	L.Brightest_Pixel();
+	L.Brightest_Pixel_col();
+	L.Brightest_Pixel_row();
 	L.control_points();
 	L.curve_fitting();
 		// L.control_vanishing();
@@ -186,7 +190,7 @@ void Lanes::Intensity_adjust()  // the top part of frame may have some intensity
 	//waitKey(0);
 }
 
-void Lanes::Brightest_Pixel()
+void Lanes::Brightest_Pixel_col()
 {
 	bisect = top_view.clone();
 	for(int i = 0; i < top_view.rows; i++)  
@@ -198,7 +202,7 @@ void Lanes::Brightest_Pixel()
 			// if(img_gray.at<uchar>(i,j) < INTENSITY_TH) img_gray.at<uchar>(i,j) = 0;
 			// else img_gray.at<uchar>(i,j) = 255;
 			int sum = 0, count = 0;
-			for(int m = i-1; m < i+2; m++)
+			for(int m = i-1; m < i+2; m++) // kernel 3X3
 				for(int n = j-1; n < j+2; n++)
 				{
 					if(m < 0 || n < 0 || m >= top_view.rows || n >= top_view.cols) continue;
@@ -237,10 +241,72 @@ void Lanes::Brightest_Pixel()
 		if(max > 100) bisect.at<uchar>(i,r) = 255;
 	}
 	// Dilation();
-	imshow("bisect",bisect);
+	imshow("bisect_row",bisect);
 	// imshow("Threshold",img_gray);
 	//waitKey(0);
 }
+
+
+void Lanes::Brightest_Pixel_row()
+{
+	//bisect = top_view.clone();
+	for(int i = 0; i < top_view.cols/2; i++)  
+	{  // finding the brightest pixel in each column
+		int l,r,max = 0;
+		for(int j = 0; j < top_view.rows; j++)
+		{
+			//bisect.at<uchar>(j,i) = 0;
+			// if(img_gray.at<uchar>(i,j) < INTENSITY_TH) img_gray.at<uchar>(i,j) = 0;
+			// else img_gray.at<uchar>(i,j) = 255;
+			int sum = 0, count = 0;
+			for(int m = i-1; m < i+2; m++) // kernel 3X3
+				for(int n = j-1; n < j+2; n++)
+				{
+					if(m < 0 || n < 0 || n >= top_view.rows || m >= top_view.cols) continue;
+					sum += top_view.at<uchar>(n,m); count++;
+				}
+			if(count != 0) sum /= count;
+			if(sum > max)
+			{
+				max = sum;
+				l = j;
+			}
+			
+		}
+		if(max>100) bisect.at<uchar>(l,i) = 255;
+		max = 0;
+	}
+	for(int i = top_view.cols/2 + 1; i < top_view.cols; i++)  
+	{  // finding the brightest pixel in each column
+		int r,max = 0;
+		for(int j = 0 ; j < top_view.rows; j++)
+		{
+			//bisect.at<uchar>(j,i) = 0;
+			// if(img_gray.at<uchar>(i,j) < INTENSITY_TH) img_gray.at<uchar>(i,j) = 0;
+			// else img_gray.at<uchar>(i,j) = 255;
+			int sum = 0, count = 0;
+			for(int m = i-1; m < i+2; m++)
+				for(int n = j-1; n < j+2; n++)
+				{
+					if(m < 0 || n < 0 || n >= img.rows || m >= img.cols) continue;
+					sum += top_view.at<uchar>(n,m); count++;
+				}
+			if(count != 0) sum /= count;
+			if(sum > max)
+			{
+				max = sum;
+				r = j;
+			}
+			
+		}
+		if(max > 100) bisect.at<uchar>(r,i) = 255;
+	// Dilation();
+	imshow("bisect_poora",bisect);
+	// imshow("Threshold",img_gray);
+	//waitKey(0);
+	}
+}
+
 
 void Lanes::topview(int flag)
 {
@@ -724,10 +790,35 @@ void Lanes::shift_parabola(quadratic quad,int flag)
 
 void Lanes::curve_fitting()
 {
-	if(frame_skip%5==0)
-	{
-		left_fy=RANSAC(left_lane);
-		right_gy=RANSAC(right_lane);
+	array_l[frame_skip%5]=RANSAC(left_lane);
+	array_r[frame_skip%5]=RANSAC(right_lane);
+    
+	if(frame_skip%5==0)	{
+		for(int i=2; i<5; i++)
+		{
+			left_fy.a=0;
+			left_fy.b=0;
+			left_fy.c=0;
+			right_gy.a=0;
+			right_gy.b=0;
+			right_gy.c=0;
+		}
+		for(int i=2; i<5; i++)
+		{
+			left_fy.a+=array_l[i].a;
+			left_fy.b+=array_l[i].b;
+			left_fy.c+=array_l[i].c;
+			right_gy.a+=array_r[i].a;
+			right_gy.b+=array_r[i].b;
+			right_gy.c+=array_r[i].c;
+		}
+		left_fy.a/=3;
+		left_fy.b/=3;
+		left_fy.c/=3;
+		right_gy.a/=3;
+		right_gy.b/=3;
+		right_gy.c/=3;
+		
 	}
     plot_quad(left_fy,0);
     plot_quad(right_gy,1);
