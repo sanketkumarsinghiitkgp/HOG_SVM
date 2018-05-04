@@ -3,19 +3,22 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+
 //using std::vector;
 //#include "videoio.hpp"
+
 #include <opencv2/gpu/gpu.hpp>
 #include <string>
-#include <time.h>
+#include <time.h>  
 #include <eigen3/Eigen/Dense>
-#include <vector>
 
-#define W 240
+#define W 150
+
 #define SUBSTRACTION_CONSTANT 30
 #define INTENSITY_TH 50
 #define PI 3.14159265
 #include "svm.h"
+
 
 struct svm_model* model;
 struct svm_node *x_space;
@@ -30,11 +33,12 @@ using namespace std;
 //using std::vector;
 using namespace cv;
 using namespace Eigen;
+#include "cluster.cpp"
 
-int j=0,frame_skip=-1;
+int j=0,frame_skip=-1; 
+ 
 
-
-struct quadratic
+struct quadratic 
 {
 	double a,b,c;
 	int inliers;
@@ -101,7 +105,7 @@ int main(int argc, char** argv)
 		// L.Hough();
 		// L.display();
 	L.Brightest_Pixel_col();
-	L.Brightest_Pixel_row();
+	//L.Brightest_Pixel_row();
 	L.control_points();
 	L.curve_fitting();
 		// L.control_vanishing();
@@ -384,7 +388,7 @@ void Lanes::topview(int flag)
             0, focalLength, h/2, 0,
             0, 0, 1, 0
             ); 
-
+ 
 
         Mat transformationMat = K * (T * (R * A1));
 
@@ -602,56 +606,60 @@ void Lanes::Hough()
 void Lanes::control_points()
 {
 	Mat temp(top_view.rows, top_view.cols, CV_8UC1, Scalar(0));
-	temp=bisect.clone();
-	// int left_prev=0,right_prev=0,first=1;
-	// for(int i = top_view.rows-1; i >= 20; i-=5)
-	// {
-	// 	if(i-20 < 0) break;
-	// 	int left = 0,right = 0,c_l = 0, c_r = 0;
-	// 	for(int j = i; j > i-20; j--)
-	// 	{
-	// 		if(j < 0) break;
-	// 		for(int k = 0; k < top_view.cols/2; k++)
-	// 		{
-	// 			if(bisect.at<uchar>(j,k) > 100) { left += k; c_l++; }
-	// 		}
-	// 		for(int k = top_view.cols/2+1; k < top_view.cols; k++)
-	// 		{
-	// 			if(bisect.at<uchar>(j,k) > 100) { right += k; c_r++; }
-	// 		}
-	// 	}
-	// 	if(c_l == 0 && c_r == 0) continue;
-	// 	if(c_l != 0) left /= c_l;
-	// 	if(c_r != 0) right /= c_r;
-	// 	if(c_l != 0) temp.at<uchar>(i-10,left) = 255;
-	// 	if(c_r != 0) temp.at<uchar>(i-10,right) = 255;
-	// 	left_prev=left;
-	// 	right_prev=right;
-	// 	first=0;
-	// }
+	Mat temp1=bisect.clone(); 
+	int left_prev=0,right_prev=0,first=1;
+	for(int i = top_view.rows-1; i >= 20; i-=5)
+	{
+		if(i-20 < 0) break;
+		int left = 0,right = 0,c_l = 0, c_r = 0;
+		for(int j = i; j > i-20; j--)
+		{
+			if(j < 0) break;
+			for(int k = 0; k < top_view.cols/2; k++)
+			{
+				if(bisect.at<uchar>(j,k) > 100) { left += k; c_l++; }
+			}
+			for(int k = top_view.cols/2+1; k < top_view.cols; k++)
+			{
+				if(bisect.at<uchar>(j,k) > 100) { right += k; c_r++; }
+			}
+		}
+		if(c_l == 0 && c_r == 0) continue;
+		if(c_l != 0) left /= c_l;
+		if(c_r != 0) right /= c_r;
+		if(c_l != 0) temp.at<uchar>(i-10,left) = 255;
+		if(c_r != 0) temp.at<uchar>(i-10,right) = 255;
+		left_prev=left;
+		right_prev=right;
+		first=0;
+	}
 	int flag_l = 0, flag_r = 0, x_l, y_l, x_r, y_r;
 	for(int i = top_view.rows; i > top_view.rows/3; i--)
 	{
 		for(int j = 0; j < top_view.cols/2; j++)
 		{
-			if(temp.at<uchar>(i,j) <100) continue;
+			if(temp1.at<uchar>(i,j) <100) continue;
 			if(flag_l == 0) {flag_l = 1; x_l = j; y_l = i; continue; }
 			//if(abs(x_l-j)>img.cols*0.08f) { continue;}
 			left_lane.push_back(Point(j,i));
 			//line(top_view, Point(x_l, y_l), Point(j, i), Scalar(255,0,0), 3, 8);
-			x_l = j; y_l = i;
+			x_l = j; y_l = i;  
 		}
 		for(int j = top_view.cols/2 + 1; j < top_view.cols; j++)
 		{
-			if(temp.at<uchar>(i,j) <100) continue;
+			if(temp1.at<uchar>(i,j) <100) continue;
 			if(flag_r == 0) {flag_r = 1; x_r = j; y_r = i; continue; }
 			right_lane.push_back(Point(j,i));
 			//line(img, Point(x_r, y_r), Point(j, i), Scalar(0,0,255), 3, 8);
 			x_r = j; y_r = i;
-		}
-	}
+		}   
+	} 	
 	curves=temp.clone();
-	imshow("points",temp);
+	cvtColor(temp,temp,CV_GRAY2BGR);
+	//Mat temp1=temp.clone();
+	clustering c; 	 
+	c.init(temp,2);  	
+	imshow("points",temp1); 
 	//imshow("lanes",img);
 	//waitKey(1);
 }

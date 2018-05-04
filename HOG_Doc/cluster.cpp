@@ -1,33 +1,15 @@
-#include <iostream>
-#include <bits/stdc++.h>
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/gpu/gpu.hpp>
-#include <string>
-#include <time.h>
+#include "cluster.hpp"
 
-using namespace std;
-using namespace cv;
+// using namespace std;
+// using namespace cv;
 
-typedef struct cluster {
-	Point mean;
-	vector<Point> members; 
-} cluster;
 
-typedef struct color_val
+void clustering::initialise_color()
 {
-	int b,g,r;
-}color_val;
-
-color_val color[6];
-
-void initialise_color()
-{
-	color[0].b=0;
+	color[0].b=0; 
 	color[0].g=0;
-	color[0].r=255;
-
+	color[0].r=255; 
+ 
 	color[1].b=0;
 	color[1].g=255;
 	color[1].r=0;
@@ -49,12 +31,12 @@ void initialise_color()
 	color[5].r=255;
 }
 
-double distance(Point p1,Point p2)
+double clustering::distance(Point p1,Point p2)
 {
 	return (double)sqrt(pow(p1.x-p2.x,2)+pow(p1.y-p2.y,2));
 }
 
-vector<cluster> shift_center(vector<cluster> clusters,Mat img,int noc)
+vector<cluster> clustering::shift_center(vector<cluster> clusters,Mat img,int noc)
 {
 	vector<Point> center(noc,Point(0,0));
 	vector<int> count(noc,1);
@@ -88,7 +70,7 @@ vector<cluster> shift_center(vector<cluster> clusters,Mat img,int noc)
 	return clusters;
 }
 
-vector<cluster> cluster_gen(vector<cluster> clusters, Mat img,int noc)
+vector<cluster> clustering::cluster_gen(vector<cluster> clusters, Mat img,int noc)
 {
 	int flag=0;
 	double dist_min=FLT_MAX,dist;
@@ -116,19 +98,22 @@ vector<cluster> cluster_gen(vector<cluster> clusters, Mat img,int noc)
 	return clusters;
 }
 
-vector<cluster> clustering(Mat img,vector<cluster> clusters,int noc)
+vector<cluster> clustering::clustering_iter(Mat img,vector<cluster> clusters,int noc)
 {
-	int iter=10;
+	int iter=15;
+	//cout<<"E2"<<endl;
 	while(iter--)
 	{
+		//cout<<"E3"<<endl;
 		clusters = cluster_gen(clusters,img,noc);
 		clusters = shift_center(clusters,img,noc);
+		//cout<<"E5"<<endl;
 	}
 	return clusters;
 }
 
 //sanity check
-void print(vector<cluster> clusters,int noc) {
+void clustering::print(vector<cluster> clusters,int noc) {
 	for(int i = 0;i<noc;i++) {
 		cout << endl << "----------------" << i << "-------------" << endl;
 		for(int j = 0;j<clusters[i].members.size();j++) {
@@ -147,27 +132,39 @@ void print(vector<cluster> clusters,int noc) {
 		cout << i << " : " << clusters[i].mean << endl;
 	}
 }
- 
-int main(int argc, char const *argv[])
+
+vector<cluster> clustering::ret()
 {
-	Mat test=imread(argv[1],1);
+	return clusters;
+}
+
+void clustering::init(Mat img,int n)
+{
+	img_org=img;
+	noc=n;
 	time_t t;
 	unsigned int seedval = (unsigned)time(&t);
 	srand(seedval);
-	int noc=atoi(argv[2]);
-	vector<cluster> clusters(noc);
+	//cout<<"E1"<<endl;
 	for(int i=0;i<noc;i++)
 	{
 		Point temp;
-		temp.x=(int)(rand()%test.cols);
-		temp.y=(int)(rand()%test.rows);
-		clusters[i].mean.x = temp.x;
-		clusters[i].mean.y = temp.y; 
+		cluster new_clust;
+		//cout<<"E"<<endl;
+		//cout<<"Rows = "<<img_org.rows<<" Cols = "<<img_org.cols<<endl;
+		temp.x=(int)(rand()%img_org.cols);
+		temp.y=(int)(rand()%img_org.rows);
+		//cout<<"E0"<<endl;
+		new_clust.mean.x=temp.x;
+		new_clust.mean.y=temp.y;
+		clusters.push_back(new_clust);
 	}
 	initialise_color();
-	clusters = clustering(test,clusters,noc);
-	imshow("Cluster",test);
-	waitKey(0);
-	print(clusters,noc);
-	return 0;
+	clusters = clustering_iter(img_org,clusters,noc);
+	//cout<<"E4"<<endl;
+	clusters.clear();
+	imshow("Cluster",img_org);	
+	waitKey(1);
+	//print(clusters,noc);
 }
+
