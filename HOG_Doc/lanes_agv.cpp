@@ -3,6 +3,8 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+using std::vector;
+#include "videoio.hpp"
 #include <opencv2/gpu/gpu.hpp>
 #include <string>
 #include <time.h>
@@ -25,20 +27,27 @@ struct svm_parameter param;
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 
 using namespace std;
-using std::vector;
+//using std::vector;
 using namespace cv;
 using namespace Eigen;
 
-int j=0;
+int j=0,frame_skip=-1;
 
+
+struct quadratic
+{
+	double a,b,c;
+	int inliers;
+};
 
 class Lanes
 {
-	Mat img,img_gray,bisect,top_view,points,curves;
+	Mat img,img_gray,bisect,top_view,points,curves,top_view_rgb;
 	vector<Vec2i> L,R;
 	vector<Point> left_lane,right_lane;
 	int frameWidth = 640;
 	int frameHeight = 480;
+	quadratic left_fy,right_gy;
 public:
 	Lanes(VideoCapture cap);
 	void Mix_Channel();
@@ -49,10 +58,14 @@ public:
 	void Edge();
 	void Hough();
 	void Dilation();
-	void topview();
+	void topview(int );
 	void control_points();
 	void control_vanishing();
 	void curve_fitting();
+	void plot_quad(quadratic,int);
+	quadratic RANSAC(vector<Point>);
+	void shift_parabola(quadratic ,int );
+	int IsValid(Mat , int, int );
 };
 
 int main(int argc, char** argv)
@@ -62,31 +75,32 @@ int main(int argc, char** argv)
     if(!cap.isOpened())  // check if we succeeded
         return -1;
     model = svm_load_model("data.txt.model");
-while(1)
-{
-	//Mat given=imread(argv[1],1);
-	Lanes L(cap);     // L --> frame
-	//L.Intensity_distribution();
+	while(1)
+	{
+		//Mat given=imread(argv[1],1);
+		Lanes L(cap);     // L --> frame
+		//L.Intensity_distribution();
 
 	L.Intensity_adjust();
 	L.Mix_Channel();
-	// L.display();
-	//L.Intensity_distribution();
+		// L.display();
+		//L.Intensity_distribution();
 
-	// L.Brightest_Pixel();
-	// L.control_points();
-	// L.Hough();
-	// L.Intensity_distribution();
-	// L.Mix_Channel();
-	// L.display();
+		// L.Brightest_Pixel();
+		// L.control_points();
+		// L.Hough();
+		// L.Intensity_distribution();
+		// L.Mix_Channel();
+		// L.display();
 	L.Edge();
-	L.topview();
-	// L.Hough();
-	// L.display();
+	L.topview(0);
+	L.topview(1);
+		// L.Hough();
+		// L.display();
 	L.Brightest_Pixel();
 	L.control_points();
 	L.curve_fitting();
-	// L.control_vanishing();
+		// L.control_vanishing();
 	waitKey(1);
 }
 	waitKey(0);
@@ -98,8 +112,18 @@ Lanes::Lanes(VideoCapture cap)
 {
  cap >> this->img; 
 	//img=given;
+ top_view_rgb=img.clone();
 //cvtColor(given,img_gray,CV_BGR2GRAY);
 	cvtColor(this->img, this->img_gray,CV_BGR2GRAY);
+	if(frame_skip>100) frame_skip=-1;
+	frame_skip++;
+}
+
+int Lanes::IsValid(Mat A,int x,int y)
+{
+	if(x<0||y<0||x>=A.cols||y>=A.rows)
+		return 0;
+	return 1;
 }
 
 void Lanes::Mix_Channel()
@@ -111,10 +135,10 @@ void Lanes::Mix_Channel()
 			int temp = 2 * img.at<Vec3b>(i,j)[0] - img.at<Vec3b>(i,j)[1]; 
 			if(temp < 0) temp=0;
 			if(temp > 255) temp=255;
-			img_gray.at<uchar>(i,j) = temp;
+			img_gray.at<uchar>(i,j) = (unsigned int)temp;
 		}
 	imshow("Mix_Chann",img_gray);
-	//waitKey(0);
+		//waitKey(0);
 }
 
 void Lanes::display()
@@ -147,7 +171,7 @@ void Lanes::Intensity_adjust()  // the top part of frame may have some intensity
 	Mat filter(img.rows,img.cols,CV_8UC1,Scalar(0));
 	for(int i = 0; i <= img.rows/4; i++)
 		for(int j = 0; j < img.cols; j++)
-			filter.at<uchar>(i,j) = (img.rows/4 - i) * (SUBSTRACTION_CONSTANT) / (img.rows/4);
+			filter.at<uchar>(i,j) = (unsigned int )(img.rows/4 - i) * (SUBSTRACTION_CONSTANT) / (img.rows/4);
 	// imshow("filter",filter);
 	// waitKey(0);
 	for(int i = 0; i < img.rows; i++)
@@ -156,7 +180,7 @@ void Lanes::Intensity_adjust()  // the top part of frame may have some intensity
 			{
 				int temp = img.at<Vec3b>(i,j)[k] - filter.at<uchar>(i,j);
 				if(temp < 0) temp = 0;
-				img.at<Vec3b>(i,j)[k] = temp;
+				img.at<Vec3b>(i,j)[k] = (unsigned int )temp;
 			}
 	imshow("Filtered Image", img);
 	//waitKey(0);
@@ -218,10 +242,14 @@ void Lanes::Brightest_Pixel()
 	//waitKey(0);
 }
 
-void Lanes::topview()
+void Lanes::topview(int flag)
 {
-
-        Mat source=top_view.clone(), destination;
+	Mat source;
+		if(flag)
+        	source=top_view.clone();
+    	else
+    		source=top_view_rgb.clone();
+        Mat destination;
         int alpha_ = 90, beta_ = 90, gamma_ = 90;
         int f_ = 500, dist_ = 500;
 
@@ -295,7 +323,10 @@ void Lanes::topview()
         Mat transformationMat = K * (T * (R * A1));
 
         warpPerspective(source, destination, transformationMat, image_size, INTER_CUBIC | WARP_INVERSE_MAP);
-        top_view=destination.clone();
+        if(flag)
+        	top_view=destination.clone();
+        else
+        	top_view_rgb=destination.clone();
         imshow("Result", destination);
         //waitKey(200);
 
@@ -456,6 +487,7 @@ void Lanes::Edge()
 	rectangle(img_gray,Point(0,img.rows*0.75),Point(img.cols-1,img.rows-1),Scalar(0),-1,8,0);
 	line(img,Point(0,img.rows/3),Point(img.cols-1,img.rows/3), Scalar(255,0,0), 2, CV_AA);
 	top_view=img_gray.clone();
+	
 	imshow("erode",img_gray);
 	imshow("t",t);
 	
@@ -539,7 +571,7 @@ void Lanes::control_points()
 			if(temp.at<uchar>(i,j) <100) continue;
 			if(flag_l == 0) {flag_l = 1; x_l = j; y_l = i; continue; }
 			//if(abs(x_l-j)>img.cols*0.08f) { continue;}
-			left_lane.push_back(Point(i,j));
+			left_lane.push_back(Point(j,i));
 			//line(top_view, Point(x_l, y_l), Point(j, i), Scalar(255,0,0), 3, 8);
 			x_l = j; y_l = i;
 		}
@@ -547,7 +579,7 @@ void Lanes::control_points()
 		{
 			if(temp.at<uchar>(i,j) <100) continue;
 			if(flag_r == 0) {flag_r = 1; x_r = j; y_r = i; continue; }
-			right_lane.push_back(Point(i,j));
+			right_lane.push_back(Point(j,i));
 			//line(img, Point(x_r, y_r), Point(j, i), Scalar(0,0,255), 3, 8);
 			x_r = j; y_r = i;
 		}
@@ -558,128 +590,146 @@ void Lanes::control_points()
 	//waitKey(1);
 }
 
-void Lanes::curve_fitting()
+quadratic Lanes::RANSAC(vector<Point> data) // y --> row, x --> column 
 {
-	int m=100,max_inlier_l=40,max_inlier_r=40;
-	cvtColor(curves,curves,CV_GRAY2BGR);
+	int m=100,max_inlier=50;
 	time_t t;
 	unsigned int seedval = (unsigned)time(&t);
 	srand(seedval);
-	float a_l=0,b_l=0,c_l=0,a_r=0,b_r=0,c_r=0,error=0.5;
+	double error=2;
+	quadratic quad;
+	quad.a=0;
+	quad.b=0;
+	quad.c=0;
 	while(m--)
 	{
-		if(!left_lane.size()) break;
-		int i_1=(int)(rand()%left_lane.size());
-		int j_1=(int)(rand()%left_lane.size());
-		int k_1=(int)(rand()%left_lane.size());
+		if(!(data.size()>4)) break;
+		int i_1=(int)(rand()%data.size());
+		int j_1=(int)(rand()%data.size());
+		int k_1=(int)(rand()%data.size());
 		if(i_1==j_1||i_1==k_1||j_1==k_1)
 		{
 			m++;
 			continue;
 		}
-		MatrixXd A(3,3),B(3,1),X(3,1);
-		A<< pow(left_lane[i_1].x,2),left_lane[i_1].x,1,
-			pow(left_lane[j_1].x,2),left_lane[j_1].x,1,
-			pow(left_lane[k_1].x,2),left_lane[k_1].x,1;
-		B<< left_lane[i_1].y,
-			left_lane[j_1].y,
-			left_lane[k_1].y;
-		if(!A.determinant()) continue;
-		X=(A.inverse())*B;
-		// cout<<"A det = "<<A.determinant()<<endl;
-		// cout<<"A_inv = "<<A.inverse()<<endl;
-		// cout<<"X_i = "<<A.inverse()*B<<endl;
+		MatrixXd A(3,3),B(3,1),X(3,1);     // x = g(y) 
+		A<< pow(data[i_1].y,2),data[i_1].y,1,
+			pow(data[j_1].y,2),data[j_1].y,1,
+			pow(data[k_1].y,2),data[k_1].y,1;
+		B<< data[i_1].x,
+			data[j_1].x,
+			data[k_1].x;
+		X<< 0,0,0;
+		if(A.determinant())
+			X=A.inverse()*B;
 		int inlier=0;
-		for(int i=0;i<left_lane.size();i++)
+		double err;		
+		for(int i=0;i<data.size();i++)
 		{
 			if(i==i_1||i==j_1||i==k_1)
 				continue;
-			int err=pow(X(0.0)*pow(left_lane[i].x,2)+X(1.0)*left_lane[i].x+X(2.0)-left_lane[i].y,2);
+			err=fabs(X(0.0)*pow(data[i].y,2)+X(1.0)*data[i].y+X(2.0)-data[i].x);
 			if(err<error)
 				inlier++;
 		}
-		//cout<<"X(0.0) = "<<X(0.0)<<endl;
-		if(inlier>max_inlier_l)
+		if(inlier>max_inlier)
 		{
-			max_inlier_l=inlier;
-			cout<<"X = "<<X<<endl;
-			//if(!fabs(a_l)<0.1f)
-				a_l=X(0.0);
-			//if(!fabs(b_l)<0.1f)
-				b_l=X(1.0);
-			//if(!fabs(c_l)<0.1f)
-				c_l=X(2.0);
+			max_inlier=inlier;
+			quad.a=X(0.0);
+			quad.b=X(1.0);
+			quad.c=X(2.0);
 		}
 	}
-	cout<<"Left : "<<a_l<<"y^2 +"<<b_l<<"y +"<<c_l<<endl;
-	m=100;
-	while(m--)
-	{
-		if(!right_lane.size()) break;
-		int i_2=(int)(rand()%right_lane.size());
-		int j_2=(int)(rand()%right_lane.size());
-		int k_2=(int)(rand()%right_lane.size());
-		//cout<<i_2<<" "<<j_2<<" "<<k_2<<endl;
-		if(i_2==j_2||i_2==k_2||j_2==k_2)
-		{
-			m++;
-			continue;
-		}
-		MatrixXd A(3,3),B(3,1),X(3,1);
-		A<< pow(right_lane[i_2].x,2),right_lane[i_2].x,1,
-			pow(right_lane[j_2].x,2),right_lane[j_2].x,1,
-			pow(right_lane[k_2].x,2),right_lane[k_2].x,1;
-		B<< right_lane[i_2].y,
-			right_lane[j_2].y,
-			right_lane[k_2].y;
-		if(!A.determinant()) continue;
-		X=(A.inverse())*B;
-		int inlier=0;
-		for(int i=0;i<right_lane.size();i++)
-		{
-			if(i==i_2||i==j_2||i==k_2)
-				continue;
-			int err=pow(X(0.0)*pow(right_lane[i].x,2)+X(1.0)*right_lane[i].x+X(2.0)-right_lane[i].y,2);
-			if(err<error)
-				inlier++;
-		}
-		if(inlier>max_inlier_r)
-		{
-			max_inlier_r=inlier;
-			cout<<"X = "<<X<<endl;
-			//if(!fabs(a_r)<0.1f)
-				a_r=X(0.0);
-			//if(!fabs(b_r)<0.1f)
-				b_r=X(1.0);
-			//if(!fabs(c_r)<0.1f)
-				c_r=X(2.0);
-		}
-	}
-	cout<<"Right : "<<a_r<<"x^2 +"<<b_r<<"x +"<<c_r<<endl;
-	for(int i=0;i<top_view.rows;i++)
-	{
-		//int j=i+top_view.cols/2;
-		cout<<"E"<<endl;
-		int col_l=(int )(a_l*i*i+b_l*i+c_l);
-		int col_r=(int )(a_r*i*i+b_r*i+c_r);
-		cout<<col_l<<" "<<col_r<<endl;
-		Point temp_l,temp_r;
-		temp_l.y=i;
-		temp_l.x=col_l;
-		temp_r.y=i;
-		temp_r.x=col_r;
-		if(abs(col_l)<top_view.cols)
-			 circle(curves,temp_l,1,Scalar(255,0,0),1,8,0);
-			//curves.at<Vec3b>(row_l,i)[0]=255;
-		if(abs(col_r)<top_view.cols)
-			 circle(curves,temp_r,1,Scalar(0,255,0),1,8,0);
-			//curves.at<Vec3b>(row_r,i+top_view.cols/2)[2]=255;
-
-	}
-	imshow("Yeeeaaaah",curves);
+	quad.inliers=max_inlier;
+	return quad;
 }
 
-// void Lanes::control_vanishing()
-// {
 
-// }
+void Lanes::plot_quad(quadratic quad,int lane)
+{
+	for(int i=0;i<top_view.rows;i++)
+	{ 
+		if(lane==0)
+		{
+			int col=(int )(quad.a*i*i+quad.b*i+quad.c);
+			Point temp;
+			temp.y=i;
+			temp.x=col;
+			if(abs(col)<top_view.cols)
+			{
+			   	circle(top_view_rgb,temp,3,Scalar(255,0,0),-1,8,0);
+			}
+		}
+		if(lane==1)
+		{
+			int col=(int )(quad.a*i*i+quad.b*i+quad.c);
+			Point temp;
+			temp.y=i;
+			temp.x=col;
+			if(quad.a==0&&quad.b==0&&quad.c==0)
+			{
+				line(top_view_rgb,Point(top_view_rgb.cols-1,0),Point(top_view_rgb.cols-1,top_view_rgb.rows-1)
+					,Scalar(0,0,255), 3, CV_AA);
+				continue;
+			}
+			if(abs(col)<top_view.cols)
+			{
+				circle(top_view_rgb,temp,3,Scalar(0,0,255),-1,8,0);
+			}
+		}
+	}
+	//shift_parabola(quad,lane);
+}
+
+void Lanes::shift_parabola(quadratic quad,int flag)
+{
+	double m_,m,theta;
+	Point final,init;
+	int W_=W;
+	//initialize f with 0 if left lane and 1 if right
+	for( init.y=-100; init.y<top_view_rgb.rows+100; init.y++)
+	{
+		init.x=quad.a*pow(init.y,2)+quad.b*init.y+quad.c;
+		m_=-(2*quad.a*init.y+quad.b);
+		if(m_){
+			m=1/m_;
+			theta=atan(m);
+		}
+		else
+			theta=PI/2;
+		// if(flag)
+		// 	W_*=-W;
+		if(flag==0)
+	    {
+	   		final.x=init.x+fabs(W_*sin(theta));
+	   	 	final.y=init.y+(W_*cos(theta));
+	    }
+	    else
+	    {
+	    	final.x=init.x-fabs(W_*sin(theta));
+	   	 	final.y=init.y+(W_*cos(theta));
+	    }
+	    if(IsValid(top_view_rgb,final.x,final.y))
+	    {
+	    	if(flag)
+	    	{
+	    		circle(top_view_rgb,final,3,Scalar(0,255,255),-1,8,0);
+	    		continue;
+	    	}
+	    	circle(top_view_rgb,final,3,Scalar(255,255,0),-1,8,0);
+	    }
+  	}
+  	return ;
+}
+
+void Lanes::curve_fitting()
+{
+	if(frame_skip%5==0)
+	{
+		left_fy=RANSAC(left_lane);
+		right_gy=RANSAC(right_lane);
+	}
+    plot_quad(left_fy,0);
+    plot_quad(right_gy,1);
+	imshow("Yeeeaaaah",top_view_rgb);
+}
