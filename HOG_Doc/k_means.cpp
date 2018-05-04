@@ -113,8 +113,12 @@ public:
 		{
 			Cluster[P[i].parent].push_back(P[i]);
 		}
-		
+		time_t t;
+		unsigned int seedval=(unsigned)time(&t);
+		for(int k=0;k<no_clusters;k++)
+		{
+			
+		}
 	}
-
 
 };
