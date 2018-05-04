@@ -790,7 +790,7 @@ void Lanes::curve_fitting()
 	array_r[frame_skip%5]=RANSAC(right_lane);
     
 	if(frame_skip%5==0)	{
-		for(int i=2; i<5; i++)
+		for(int i=4; i<5; i++)
 		{
 			left_fy.a=0;
 			left_fy.b=0;
@@ -799,7 +799,7 @@ void Lanes::curve_fitting()
 			right_gy.b=0;
 			right_gy.c=0;
 		}
-		for(int i=2; i<5; i++)
+		for(int i=4; i<5; i++)
 		{
 			left_fy.a+=array_l[i].a;
 			left_fy.b+=array_l[i].b;
@@ -808,12 +808,12 @@ void Lanes::curve_fitting()
 			right_gy.b+=array_r[i].b;
 			right_gy.c+=array_r[i].c;
 		}
-		left_fy.a/=3;
-		left_fy.b/=3;
-		left_fy.c/=3;
-		right_gy.a/=3;
-		right_gy.b/=3;
-		right_gy.c/=3;
+		// left_fy.a/=3;
+		// left_fy.b/=3;
+		// left_fy.c/=3;
+		// right_gy.a/=3;
+		// right_gy.b/=3;
+		// right_gy.c/=3;
 		
 	}
     plot_quad(left_fy,0);
