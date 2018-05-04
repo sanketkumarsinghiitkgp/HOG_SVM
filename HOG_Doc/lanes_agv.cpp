@@ -3,6 +3,10 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+
+//using std::vector;
+//#include "videoio.hpp"
+
 #include <opencv2/gpu/gpu.hpp>
 #include <string>
 #include <time.h>  
@@ -47,7 +51,7 @@ class Lanes
 	vector<Point> left_lane,right_lane;
 	int frameWidth = 640;
 	int frameHeight = 480;
-	quadratic left_fy,right_gy;
+	quadratic left_fy[5],right_gy[5];
 	quadratic array_l[5],array_r[5];
 
 public:
@@ -65,7 +69,7 @@ public:
 	void control_points();
 	void control_vanishing();
 	void curve_fitting();
-	void plot_quad(quadratic,int);
+	void plot_quad(int);
 	quadratic RANSAC(vector<Point>);
 	void shift_parabola(quadratic ,int );
 	int IsValid(Mat , int, int );
@@ -715,34 +719,56 @@ quadratic Lanes::RANSAC(vector<Point> data) // y --> row, x --> column
 }
 
 
-void Lanes::plot_quad(quadratic quad,int lane)
+void Lanes::plot_quad(int lane)
 {
+	int count=0;
 	for(int i=0;i<top_view.rows;i++)
 	{ 
 		if(lane==0)
 		{
-			int col=(int )(quad.a*i*i+quad.b*i+quad.c);
 			Point temp;
 			temp.y=i;
-			temp.x=col;
-			if(abs(col)<top_view.cols)
+			temp.x=0;
+			count=0;
+			for(int z=0; z<5; z++)
+			{
+
+				temp.x+=(int )(left_fy[z].a*i*i+left_fy[z].b*i+left_fy[z].c);
+			}
+			temp.x/=5;
+			if(abs(temp.x)<top_view.cols)
 			{
 			   	circle(top_view_rgb,temp,3,Scalar(255,0,0),-1,8,0);
 			}
 		}
 		if(lane==1)
 		{
-			int col=(int )(quad.a*i*i+quad.b*i+quad.c);
-			Point temp;
+			Point temp; int flag=1;
 			temp.y=i;
-			temp.x=col;
-			if(quad.a==0&&quad.b==0&&quad.c==0)
+			temp.x=0;
+			count=5;
+			for(int z=0; z<5; z++)
+			{
+				if(right_gy[z].a==0&&right_gy[z].b==0&&right_gy[z].c==0)
+			    {
+					count--;
+			    }
+				else
+				{
+					flag=0;
+					temp.x+=(int )(right_gy[z].a*i*i+right_gy[z].b*i+right_gy[z].c);
+				}
+			}
+			if(count==0)
+				count=1;
+			temp.x/=count;
+			if(flag)
 			{
 				line(top_view_rgb,Point(top_view_rgb.cols-1,0),Point(top_view_rgb.cols-1,top_view_rgb.rows-1)
 					,Scalar(0,0,255), 3, CV_AA);
 				continue;
 			}
-			if(abs(col)<top_view.cols)
+			if(abs(temp.x)<top_view.cols)
 			{
 				circle(top_view_rgb,temp,3,Scalar(0,0,255),-1,8,0);
 			}
@@ -798,23 +824,23 @@ void Lanes::curve_fitting()
 	array_r[frame_skip%5]=RANSAC(right_lane);
     
 	if(frame_skip%5==0)	{
-		for(int i=4; i<5; i++)
+		// for(int i=0; i<5; i++)
+		// {
+		// 	left_fy[i].a=0;
+		// 	left_fy[i].b=0;
+		// 	left_fy[i].c=0;
+		// 	right_gy[i].a=0;
+		// 	right_gy[i].b=0;
+		// 	right_gy[i].c=0;
+		// }
+		for(int i=0; i<5; i++)
 		{
-			left_fy.a=0;
-			left_fy.b=0;
-			left_fy.c=0;
-			right_gy.a=0;
-			right_gy.b=0;
-			right_gy.c=0;
-		}
-		for(int i=4; i<5; i++)
-		{
-			left_fy.a+=array_l[i].a;
-			left_fy.b+=array_l[i].b;
-			left_fy.c+=array_l[i].c;
-			right_gy.a+=array_r[i].a;
-			right_gy.b+=array_r[i].b;
-			right_gy.c+=array_r[i].c;
+			left_fy[i].a=array_l[i].a;
+			left_fy[i].b=array_l[i].b;
+			left_fy[i].c=array_l[i].c;
+			right_gy[i].a=array_r[i].a;
+			right_gy[i].b=array_r[i].b;
+			right_gy[i].c=array_r[i].c;
 		}
 		// left_fy.a/=3;
 		// left_fy.b/=3;
@@ -824,7 +850,7 @@ void Lanes::curve_fitting()
 		// right_gy.c/=3;
 		
 	}
-    plot_quad(left_fy,0);
-    plot_quad(right_gy,1);
+    plot_quad(0);
+    plot_quad(1);
 	imshow("Yeeeaaaah",top_view_rgb);
 }
