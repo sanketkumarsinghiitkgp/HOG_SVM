@@ -5,7 +5,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/gpu/gpu.hpp>
 #include <string>
-#include <time.h>  
+#include <ctime>  
 #include <eigen3/Eigen/Dense>
 #define W 150
 #define SUBSTRACTION_CONSTANT 30
@@ -27,6 +27,9 @@ using namespace std;
 using namespace cv;
 using namespace Eigen;
 #include "cluster.cpp"
+
+clock_t prevFrame;
+int fps;
 
 int j=0,frame_skip=-1; 
  
@@ -118,6 +121,9 @@ Lanes::Lanes(VideoCapture cap)
 	cvtColor(this->img, this->img_gray,CV_BGR2GRAY);
 	if(frame_skip>100) frame_skip=-1;
 	frame_skip++;
+	fps = (double)(CLOCKS_PER_SEC)/((double)(clock() - prevFrame));
+	//cout << "FPS = " << fps << endl;
+	prevFrame = clock();
 }
 
 int Lanes::IsValid(Mat A,int x,int y)
@@ -390,6 +396,7 @@ void Lanes::topview(int flag)
         	top_view=destination.clone();
         else
         	top_view_rgb=destination.clone();
+        
         imshow("Result", destination);
         //waitKey(200);
 
@@ -845,5 +852,6 @@ void Lanes::curve_fitting()
 	}
     plot_quad(0);
     plot_quad(1);
+    putText(top_view_rgb, to_string(fps), Point(0,30), FONT_HERSHEY_SCRIPT_SIMPLEX, 1, Scalar(0,0,0),4);
 	imshow("Yeeeaaaah",top_view_rgb);
 }

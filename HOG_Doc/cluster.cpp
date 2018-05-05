@@ -268,7 +268,7 @@ void clustering::init(Mat img,int n)
 	clusters=clustering_iter(img_org,clusters,noc);
 	clusters=merge_cluster(clusters,noc);
 	show(clusters,img_org);
-	showdebug(clusters);
+	//showdebug(clusters);
 	//cout<<"E4"<<endl;
 	for(int i=0;i<clusters.size();i++)
 		circle(img_org,clusters[i].mean,3,Scalar(color[i].b,color[i].g,color[i].r),-1,8,0);
